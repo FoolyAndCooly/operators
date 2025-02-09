@@ -33,19 +33,19 @@ class Inplace(Enum):
     INPLACE_X = auto()
 
 
-class ReluDescriptor(Structure):
+class ClipDescriptor(Structure):
     _fields_ = [("device", c_int32)]
 
 
-infiniopReluDescriptor_t = POINTER(ReluDescriptor)
+infiniopClipDescriptor_t = POINTER(ClipDescriptor)
 
 
-def relu(x):
+def clip(x, min_, max_):
     if PROFILE:
-        ans = torch.nn.functional.relu(x).to(x.dtype)
+        ans = torch.clip(x, min=min_, max=max_).to(x.dtype)
         torch.cuda.synchronize()
         return ans
-    return torch.nn.functional.relu(x).to(x.dtype)
+    return torch.clip(x, min=min_, max=max_).to(x.dtype)
 
 
 def test(
@@ -57,31 +57,36 @@ def test(
     inplace=Inplace.OUT_OF_PLACE,
 ):
     print(
-        f"Testing Relu on {torch_device} with tensor_shape:{tensor_shape} dtype:{tensor_dtype} inplace: {inplace.name}"
+        f"Testing Clip on {torch_device} with tensor_shape:{tensor_shape} dtype:{tensor_dtype} inplace: {inplace.name}"
     )
 
     x = torch.rand(tensor_shape, dtype=tensor_dtype).to(torch_device) * 2 - 1
     y = torch.rand(tensor_shape, dtype=tensor_dtype).to(torch_device) if inplace == Inplace.OUT_OF_PLACE else x
-
+    min_ = torch.rand(1, dtype=tensor_dtype).to(torch_device)
+    max_ = min_ + 0.1
     for i in range(NUM_PRERUN if PROFILE else 1):
-        ans = relu(x)
+        ans = clip(x, min_, max_)
     if PROFILE:
         start_time = time.time()
         for i in range(NUM_ITERATIONS):
-            _ = relu(x)
-        elapsed = (time.time() - start_time) / NUM_ITERATIONS
+            _ = clip(x, min_, max_)
+        elapsed = (time.time() - start_time)
         print(f"pytorch time: {elapsed :6f}")
 
     x_tensor = to_tensor(x, lib)
     y_tensor = to_tensor(y, lib) if inplace == Inplace.OUT_OF_PLACE else x_tensor
-    descriptor = infiniopReluDescriptor_t()
-
+    descriptor = infiniopClipDescriptor_t()
+    
+    min_ptr = c_void_p(min_.data_ptr())
+    max_ptr = c_void_p(max_.data_ptr())
     check_error(
-        lib.infiniopCreateReluDescriptor(
+        lib.infiniopCreateClipDescriptor(
             handle,
             ctypes.byref(descriptor),
             y_tensor.descriptor,
             x_tensor.descriptor,
+	    min_ptr,
+	    max_ptr,
         )
     )
 
@@ -90,18 +95,17 @@ def test(
     y_tensor.descriptor.contents.invalidate()
 
     for i in range(NUM_PRERUN if PROFILE else 1):
-        check_error(lib.infiniopRelu(descriptor, y_tensor.data, x_tensor.data, None))
+        check_error(lib.infiniopClip(descriptor, y_tensor.data, x_tensor.data, min_ptr, max_ptr, None))
     if PROFILE:
         start_time = time.time()
         for i in range(NUM_ITERATIONS):
             check_error(
-                lib.infiniopRelu(descriptor, y_tensor.data, x_tensor.data, None)
+                lib.infiniopClip(descriptor, y_tensor.data, x_tensor.data, min_ptr, max_ptr, None)
             )
-        elapsed = (time.time() - start_time) / NUM_ITERATIONS
+        elapsed = (time.time() - start_time)
         print(f"    lib time: {elapsed :6f}")
-
-    assert torch.allclose(y, ans, atol=0, rtol=1e-3)
-    check_error(lib.infiniopDestroyReluDescriptor(descriptor))
+    assert torch.allclose(y, ans, atol=0, rtol=1e-10)
+    check_error(lib.infiniopDestroyClipDescriptor(descriptor))
 
 
 def test_cpu(lib, test_cases):
@@ -132,16 +136,6 @@ def test_bang(lib, test_cases):
         test(lib, handle, "mlu", tensor_shape, tensor_dtype=torch.float32, inplace=inplace)
     destroy_handle(lib, handle)
 
-def test_musa(lib, test_cases):
-    import torch_musa
-
-    device = DeviceEnum.DEVICE_MUSA
-    handle = create_handle(lib, device)
-    for tensor_shape, inplace in test_cases:
-        test(lib, handle, "musa", tensor_shape, tensor_dtype=torch.float16, inplace=inplace)
-        test(lib, handle, "musa", tensor_shape, tensor_dtype=torch.float32, inplace=inplace)
-    destroy_handle(lib, handle)
-
 
 if __name__ == "__main__":
     test_cases = [
@@ -157,23 +151,27 @@ if __name__ == "__main__":
     ]
     args = get_args()
     lib = open_lib()
-    lib.infiniopCreateReluDescriptor.restype = c_int32
-    lib.infiniopCreateReluDescriptor.argtypes = [
+    lib.infiniopCreateClipDescriptor.restype = c_int32
+    lib.infiniopCreateClipDescriptor.argtypes = [
         infiniopHandle_t,
-        POINTER(infiniopReluDescriptor_t),
+        POINTER(infiniopClipDescriptor_t),
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
+	c_void_p,
+	c_void_p,
     ]
-    lib.infiniopRelu.restype = c_int32
-    lib.infiniopRelu.argtypes = [
-        infiniopReluDescriptor_t,
+    lib.infiniopClip.restype = c_int32
+    lib.infiniopClip.argtypes = [
+        infiniopClipDescriptor_t,
         c_void_p,
         c_void_p,
         c_void_p,
+	c_void_p,
+	c_void_p,
     ]
-    lib.infiniopDestroyReluDescriptor.restype = c_int32
-    lib.infiniopDestroyReluDescriptor.argtypes = [
-        infiniopReluDescriptor_t,
+    lib.infiniopDestroyClipDescriptor.restype = c_int32
+    lib.infiniopDestroyClipDescriptor.argtypes = [
+        infiniopClipDescriptor_t,
     ]
 
     if args.cpu:
@@ -182,8 +180,6 @@ if __name__ == "__main__":
         test_cuda(lib, test_cases)
     if args.bang:
         test_bang(lib, test_cases)
-    if args.musa:
-        test_musa(lib, test_cases)
-    if not (args.cpu or args.cuda or args.bang or args.musa):
+    if not (args.cpu or args.cuda or args.bang):
         test_cpu(lib, test_cases)
     print("\033[92mTest passed!\033[0m")
