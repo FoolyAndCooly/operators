@@ -1,5 +1,5 @@
-#ifndef __CUDA_where_H__
-#define __CUDA_where_H__
+#ifndef __CUDA_WHERE_H__
+#define __CUDA_WHERE_H__
 
 #include "../../../devices/cuda/common_cuda.h"
 #include "../../../devices/cuda/cuda_handle.h"
