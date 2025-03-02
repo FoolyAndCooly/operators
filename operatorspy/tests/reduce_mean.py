@@ -29,14 +29,14 @@ NUM_ITERATIONS = 1000
 class Inplace(Enum):
     OUT_OF_PLACE = auto()
 
-class ReduceMaxDescriptor(Structure):
+class ReduceMeanDescriptor(Structure):
     _fields_ = [("device", c_int32)]
 
 
-infiniopReduceMaxDescriptor_t = POINTER(ReduceMaxDescriptor)
+infiniopReduceMeanDescriptor_t = POINTER(ReduceMeanDescriptor)
 
-def reduce_max(data, axes):
-    result = torch.amax(data, dim=axes)
+def reduce_mean(data, axes):
+    result = torch.mean(data, dim=axes)
     return result
 
 def test(
@@ -48,17 +48,17 @@ def test(
     inplace=Inplace.OUT_OF_PLACE,
 ):
     print(
-        f"Testing ReduceMax on {torch_device} with data_shape:{data_shape} dtype:{tensor_dtype} inplace: {inplace.name}"
+        f"Testing ReduceMean on {torch_device} with data_shape:{data_shape} dtype:{tensor_dtype} inplace: {inplace.name}"
     )
     data = torch.rand(data_shape, dtype=tensor_dtype).to(torch_device)
     rank = len(data_shape)
     axes = torch.randint(low=0, high=rank, size=(1,))
     for i in range(NUM_PRERUN if PROFILE else 1):
-        ans = reduce_max(data, axes[0].item())
+        ans = reduce_mean(data, axes[0].item())
     if PROFILE:
         start_time = time.time()
         for i in range(NUM_ITERATIONS):
-            _ = reduce_max(data, axes)
+            _ = reduce_mean(data, axes)
         elapsed = (time.time() - start_time)
         print(f"pytorch time: {elapsed :6f}")
 
@@ -68,10 +68,10 @@ def test(
     reduced_tensor = to_tensor(reduced, lib)
     keepdims = 1;
     noop_with_empty_axes = 0
-    descriptor = infiniopReduceMaxDescriptor_t()
+    descriptor = infiniopReduceMeanDescriptor_t()
 
     check_error(
-        lib.infiniopCreateReduceMaxDescriptor(
+        lib.infiniopCreateReduceMeanDescriptor(
             handle,
             ctypes.byref(descriptor),
             reduced_tensor.descriptor,
@@ -89,18 +89,18 @@ def test(
 
     for i in range(NUM_PRERUN if PROFILE else 1):
         check_error(
-            lib.infiniopReduceMax(descriptor, reduced_tensor.data, data_tensor.data, axes_tensor.data, None)
+            lib.infiniopReduceMean(descriptor, reduced_tensor.data, data_tensor.data, axes_tensor.data, None)
         )
     if PROFILE:
         start_time = time.time()
         for i in range(NUM_ITERATIONS):
             check_error(
-                lib.infiniopReduceMax(descriptor, reduced_tensor.data, data_tensor.data, axes_tensor.data, None)
+                lib.infiniopReduceMean(descriptor, reduced_tensor.data, data_tensor.data, axes_tensor.data, None)
             )
         elapsed = (time.time() - start_time)
         print(f"    lib time: {elapsed :6f}")
-    assert torch.allclose(reduced, ans, atol=1e-6, rtol=1e-6)
-    check_error(lib.infiniopDestroyReduceMaxDescriptor(descriptor))
+    assert torch.allclose(reduced, ans, atol=1e-3, rtol=1e-3)
+    check_error(lib.infiniopDestroyReduceMeanDescriptor(descriptor))
 
 def test_cpu(lib, test_cases):
     device = DeviceEnum.DEVICE_CPU
@@ -133,9 +133,9 @@ def test_bang(lib, test_cases):
 
 if __name__ == "__main__":
     test_cases = [
-        # ((3, 2), Inplace.OUT_OF_PLACE),
-	# ((16, 4), Inplace.OUT_OF_PLACE),
-        # ((31, 15), Inplace.OUT_OF_PLACE),
+        ((3, 2), Inplace.OUT_OF_PLACE),
+	((16, 4), Inplace.OUT_OF_PLACE),
+        ((31, 15), Inplace.OUT_OF_PLACE),
 	((1, 129), Inplace.OUT_OF_PLACE),
         ((129, 129), Inplace.OUT_OF_PLACE),
         ((50257, 768), Inplace.OUT_OF_PLACE),
@@ -143,27 +143,27 @@ if __name__ == "__main__":
     ]
     args = get_args()
     lib = open_lib()
-    lib.infiniopCreateReduceMaxDescriptor.restype = c_int32
-    lib.infiniopCreateReduceMaxDescriptor.argtypes = [
+    lib.infiniopCreateReduceMeanDescriptor.restype = c_int32
+    lib.infiniopCreateReduceMeanDescriptor.argtypes = [
         infiniopHandle_t,
-        POINTER(infiniopReduceMaxDescriptor_t),
+        POINTER(infiniopReduceMeanDescriptor_t),
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
 	c_int32,
 	c_int32
     ]
-    lib.infiniopReduceMax.restype = c_int32
-    lib.infiniopReduceMax.argtypes = [
-        infiniopReduceMaxDescriptor_t,
+    lib.infiniopReduceMean.restype = c_int32
+    lib.infiniopReduceMean.argtypes = [
+        infiniopReduceMeanDescriptor_t,
         c_void_p,
         c_void_p,
         c_void_p,
         c_void_p,
     ]
-    lib.infiniopDestroyReduceMaxDescriptor.restype = c_int32
-    lib.infiniopDestroyReduceMaxDescriptor.argtypes = [
-        infiniopReduceMaxDescriptor_t,
+    lib.infiniopDestroyReduceMeanDescriptor.restype = c_int32
+    lib.infiniopDestroyReduceMeanDescriptor.argtypes = [
+        infiniopReduceMeanDescriptor_t,
     ]
 
     if args.cpu:

@@ -29,14 +29,14 @@ NUM_ITERATIONS = 1000
 class Inplace(Enum):
     OUT_OF_PLACE = auto()
 
-class ReduceMaxDescriptor(Structure):
+class ReduceMinDescriptor(Structure):
     _fields_ = [("device", c_int32)]
 
 
-infiniopReduceMaxDescriptor_t = POINTER(ReduceMaxDescriptor)
+infiniopReduceMinDescriptor_t = POINTER(ReduceMinDescriptor)
 
-def reduce_max(data, axes):
-    result = torch.amax(data, dim=axes)
+def reduce_min(data, axes):
+    result = torch.amin(data, dim=axes)
     return result
 
 def test(
@@ -48,17 +48,17 @@ def test(
     inplace=Inplace.OUT_OF_PLACE,
 ):
     print(
-        f"Testing ReduceMax on {torch_device} with data_shape:{data_shape} dtype:{tensor_dtype} inplace: {inplace.name}"
+        f"Testing ReduceMin on {torch_device} with data_shape:{data_shape} dtype:{tensor_dtype} inplace: {inplace.name}"
     )
     data = torch.rand(data_shape, dtype=tensor_dtype).to(torch_device)
     rank = len(data_shape)
     axes = torch.randint(low=0, high=rank, size=(1,))
     for i in range(NUM_PRERUN if PROFILE else 1):
-        ans = reduce_max(data, axes[0].item())
+        ans = reduce_min(data, axes[0].item())
     if PROFILE:
         start_time = time.time()
         for i in range(NUM_ITERATIONS):
-            _ = reduce_max(data, axes)
+            _ = reduce_min(data, axes)
         elapsed = (time.time() - start_time)
         print(f"pytorch time: {elapsed :6f}")
 
@@ -68,10 +68,10 @@ def test(
     reduced_tensor = to_tensor(reduced, lib)
     keepdims = 1;
     noop_with_empty_axes = 0
-    descriptor = infiniopReduceMaxDescriptor_t()
+    descriptor = infiniopReduceMinDescriptor_t()
 
     check_error(
-        lib.infiniopCreateReduceMaxDescriptor(
+        lib.infiniopCreateReduceMinDescriptor(
             handle,
             ctypes.byref(descriptor),
             reduced_tensor.descriptor,
@@ -89,18 +89,18 @@ def test(
 
     for i in range(NUM_PRERUN if PROFILE else 1):
         check_error(
-            lib.infiniopReduceMax(descriptor, reduced_tensor.data, data_tensor.data, axes_tensor.data, None)
+            lib.infiniopReduceMin(descriptor, reduced_tensor.data, data_tensor.data, axes_tensor.data, None)
         )
     if PROFILE:
         start_time = time.time()
         for i in range(NUM_ITERATIONS):
             check_error(
-                lib.infiniopReduceMax(descriptor, reduced_tensor.data, data_tensor.data, axes_tensor.data, None)
+                lib.infiniopReduceMin(descriptor, reduced_tensor.data, data_tensor.data, axes_tensor.data, None)
             )
         elapsed = (time.time() - start_time)
         print(f"    lib time: {elapsed :6f}")
     assert torch.allclose(reduced, ans, atol=1e-6, rtol=1e-6)
-    check_error(lib.infiniopDestroyReduceMaxDescriptor(descriptor))
+    check_error(lib.infiniopDestroyReduceMinDescriptor(descriptor))
 
 def test_cpu(lib, test_cases):
     device = DeviceEnum.DEVICE_CPU
@@ -143,27 +143,27 @@ if __name__ == "__main__":
     ]
     args = get_args()
     lib = open_lib()
-    lib.infiniopCreateReduceMaxDescriptor.restype = c_int32
-    lib.infiniopCreateReduceMaxDescriptor.argtypes = [
+    lib.infiniopCreateReduceMinDescriptor.restype = c_int32
+    lib.infiniopCreateReduceMinDescriptor.argtypes = [
         infiniopHandle_t,
-        POINTER(infiniopReduceMaxDescriptor_t),
+        POINTER(infiniopReduceMinDescriptor_t),
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
 	c_int32,
 	c_int32
     ]
-    lib.infiniopReduceMax.restype = c_int32
-    lib.infiniopReduceMax.argtypes = [
-        infiniopReduceMaxDescriptor_t,
+    lib.infiniopReduceMin.restype = c_int32
+    lib.infiniopReduceMin.argtypes = [
+        infiniopReduceMinDescriptor_t,
         c_void_p,
         c_void_p,
         c_void_p,
         c_void_p,
     ]
-    lib.infiniopDestroyReduceMaxDescriptor.restype = c_int32
-    lib.infiniopDestroyReduceMaxDescriptor.argtypes = [
-        infiniopReduceMaxDescriptor_t,
+    lib.infiniopDestroyReduceMinDescriptor.restype = c_int32
+    lib.infiniopDestroyReduceMinDescriptor.argtypes = [
+        infiniopReduceMinDescriptor_t,
     ]
 
     if args.cpu:

@@ -1,5 +1,5 @@
-#ifndef __CUDA_REDUCE_MAX_H__
-#define __CUDA_REDUCE_MAX_H__
+#ifndef __CUDA_REDUCE_H__
+#define __CUDA_REDUCE_H__
 
 #include "../../../devices/cuda/common_cuda.h"
 #include "../../../devices/cuda/cuda_handle.h"
@@ -7,29 +7,31 @@
 #include <cuda_fp16.h>
 #include <numeric>
 
-struct ReduceMaxCudaDescriptor {
+struct ReduceCudaDescriptor {
     Device device;
     int device_id;
+    int op;
     DT dtype;
     uint64_t *shape;
     uint64_t ndim;
 };
 
-typedef struct ReduceMaxCudaDescriptor *ReduceMaxCudaDescriptor_t;
+typedef struct ReduceCudaDescriptor *ReduceCudaDescriptor_t;
 
-infiniopStatus_t cudaCreateReduceMaxDescriptor(CudaHandle_t,
-                                         ReduceMaxCudaDescriptor_t *,
+infiniopStatus_t cudaCreateReduceDescriptor(CudaHandle_t,
+                                         ReduceCudaDescriptor_t *,
                                          infiniopTensorDescriptor_t reduced,
                                          infiniopTensorDescriptor_t data,
                                          infiniopTensorDescriptor_t axes,
+					 int op,
 					 int keepdims,
 					 int noop_with_empty_axes
 					 );
 
-infiniopStatus_t cudaReduceMax(ReduceMaxCudaDescriptor_t desc,
+infiniopStatus_t cudaReduce(ReduceCudaDescriptor_t desc,
                          void *reduced, void const *data, void const *axes,
                          void *stream);
 
-infiniopStatus_t cudaDestroyReduceMaxDescriptor(ReduceMaxCudaDescriptor_t desc);
+infiniopStatus_t cudaDestroyReduceDescriptor(ReduceCudaDescriptor_t desc);
 
 #endif

@@ -1,12 +1,13 @@
-#include "reduce_max.cuh"
+#include "reduce.cuh"
 #include "../../../devices/cuda/common_cuda.h"
 #include "../../utils.h"
 
-infiniopStatus_t cudaCreateReduceMaxDescriptor(CudaHandle_t handle,
-                                         ReduceMaxCudaDescriptor_t *desc_ptr,
+infiniopStatus_t cudaCreateReduceDescriptor(CudaHandle_t handle,
+                                         ReduceCudaDescriptor_t *desc_ptr,
                                          infiniopTensorDescriptor_t reduced,
                                          infiniopTensorDescriptor_t data,
                                          infiniopTensorDescriptor_t axes,
+					 int op,
 					 int keepdims,
 					 int noop_with_empty_axes
 					 ) {
@@ -20,9 +21,10 @@ infiniopStatus_t cudaCreateReduceMaxDescriptor(CudaHandle_t handle,
         return STATUS_BAD_TENSOR_DTYPE;
     }
 
-    *desc_ptr = new ReduceMaxCudaDescriptor{
+    *desc_ptr = new ReduceCudaDescriptor{
         DevNvGpu,
         handle->device_id,
+	op,
         data->dt,
 	data->shape,
 	data->ndim
@@ -30,7 +32,7 @@ infiniopStatus_t cudaCreateReduceMaxDescriptor(CudaHandle_t handle,
     return STATUS_SUCCESS;
 }
 
-infiniopStatus_t cudaDestroyReduceMaxDescriptor(ReduceMaxCudaDescriptor_t desc) {
+infiniopStatus_t cudaDestroyReduceDescriptor(ReduceCudaDescriptor_t desc) {
     delete desc;
     return STATUS_SUCCESS;
 }

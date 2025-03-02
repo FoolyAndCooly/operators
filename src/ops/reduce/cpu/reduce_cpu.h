@@ -1,31 +1,33 @@
-#ifndef __CPU_REDUCE_MAX_H__
-#define __CPU_REDUCE_MAX_H__
+#ifndef __CPU_REDUCE_H__
+#define __CPU_REDUCE_H__
 
 #include "operators.h"
 #include <numeric>
 
-struct ReduceMaxCpuDescriptor {
+struct ReduceCpuDescriptor {
     Device device;
+    int op;
     DT dtype;
     uint64_t *shape;
     int ndim;
 };
 
-typedef struct ReduceMaxCpuDescriptor *ReduceMaxCpuDescriptor_t;
+typedef struct ReduceCpuDescriptor *ReduceCpuDescriptor_t;
 
-infiniopStatus_t cpuCreateReduceMaxDescriptor(infiniopHandle_t,
-                                         ReduceMaxCpuDescriptor_t *,
+infiniopStatus_t cpuCreateReduceDescriptor(infiniopHandle_t,
+                                         ReduceCpuDescriptor_t *,
                                          infiniopTensorDescriptor_t reduced,
                                          infiniopTensorDescriptor_t data,
                                          infiniopTensorDescriptor_t axes,
+					 int op,
 					 int keepdims,
                                          int noop_with_empty_axes
 					 );
 
-infiniopStatus_t cpuReduceMax(ReduceMaxCpuDescriptor_t desc,
+infiniopStatus_t cpuReduce(ReduceCpuDescriptor_t desc,
                          void *reduced, void const *data, void const *axes,
                          void *stream);
 
-infiniopStatus_t cpuDestroyReduceMaxDescriptor(ReduceMaxCpuDescriptor_t desc);
+infiniopStatus_t cpuDestroyReduceDescriptor(ReduceCpuDescriptor_t desc);
 
 #endif
